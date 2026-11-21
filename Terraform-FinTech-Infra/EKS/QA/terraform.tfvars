@@ -9,7 +9,7 @@ environment  = "QA"
 ############################ Networking lookup ############################
 # Must match Networking/QA: its backend.tf (bucket + key) and the App VPC name in its terraform.tfvars
 networking_state_bucket = "fintech-project-statefile-bucket"
-networking_state_key    = "cloudnetworking/qa/networking.tfstate"
+networking_state_key    = "networking/env/qa/networking.tfstate"
 vpc_name                = "FinTech-App-QA"
 
 ############################ Control plane ############################

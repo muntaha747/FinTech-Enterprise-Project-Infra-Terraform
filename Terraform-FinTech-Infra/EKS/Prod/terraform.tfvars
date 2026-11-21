@@ -9,7 +9,7 @@ environment  = "Prod"
 ############################ Networking lookup ############################
 # Must match Networking/Prod: its backend.tf (bucket + key) and the App VPC name in its terraform.tfvars
 networking_state_bucket = "fintech-project-statefile-bucket"
-networking_state_key    = "cloudnetworking/prod/networking.tfstate"
+networking_state_key    = "networking/env/prod/networking.tfstate"
 vpc_name                = "FinTech-App"
 
 ############################ Control plane ############################

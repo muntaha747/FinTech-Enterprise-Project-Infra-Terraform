@@ -9,7 +9,7 @@ environment  = "Dev"
 ############################ Networking lookup ############################
 # Must match Networking/Dev: its backend.tf (bucket + key) and the App VPC name in its terraform.tfvars
 networking_state_bucket = "fintech-project-statefile-bucket"
-networking_state_key    = "cloudnetworking/dev/networking.tfstate"
+networking_state_key    = "networking/env/dev/networking.tfstate"
 vpc_name                = "FinTech-App-Dev"
 
 ############################ Control plane ############################

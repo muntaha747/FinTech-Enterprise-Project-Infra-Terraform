@@ -2,7 +2,7 @@
 terraform {
   backend "s3" {
     bucket       = "fintech-project-statefile-bucket"
-    key          = "cloudnetworking/dev/networking.tfstate"
+    key          = "networking/env/dev/networking.tfstate"
     region       = "us-east-1"
     encrypt      = true
     use_lockfile = true
