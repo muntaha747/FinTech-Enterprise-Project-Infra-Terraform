@@ -1,0 +1,27 @@
+# =============================================================================
+#  CODEOWNERS - who must review changes to which paths
+#  Rules are read top to bottom; the LAST matching rule wins.
+#  Syntax:  <path pattern>   <owner> [<owner> ...]
+#  Owners must be GitHub users/teams with WRITE access to this repo.
+#  To add a teammate as co-owner, append their handle, e.g.
+#    /Terraform-FinTech-Infra/Networking/   @muntaha747 @teammate-username
+# =============================================================================
+
+# Default: you review everything
+*                                   @muntaha747
+
+# Terraform infrastructure
+/Terraform-FinTech-Infra/           @muntaha747
+/Terraform-FinTech-Infra/Networking/ @muntaha747
+/Terraform-FinTech-Infra/EKS/       @muntaha747
+/Terraform-FinTech-Infra/IAM/       @muntaha747
+/Terraform-FinTech-Infra/ECR/       @muntaha747
+/Terraform-FinTech-Infra/S3/        @muntaha747
+/Terraform-FinTech-Infra/Kafka/     @muntaha747
+/Terraform-FinTech-Infra/Database/  @muntaha747
+
+# Production networking - most sensitive
+/Terraform-FinTech-Infra/Networking/Prod/ @muntaha747
+
+# CI/CD pipelines and this file itself - so nobody can remove you as reviewer
+/.github/                           @muntaha747

@@ -9,7 +9,7 @@ environment  = "Stage"
 ############################ Networking lookup ############################
 # Must match Networking/Stage: its backend.tf (bucket + key) and the App VPC name in its terraform.tfvars
 networking_state_bucket = "fintech-project-statefile-bucket"
-networking_state_key    = "cloudnetworking/stage/networking.tfstate"
+networking_state_key    = "networking/env/stage/networking.tfstate"
 vpc_name                = "FinTech-App-Stage"
 
 ############################ Control plane ############################

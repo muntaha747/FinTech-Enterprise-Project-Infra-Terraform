@@ -322,8 +322,8 @@ locals {
 | IAM | `product-iam/iam-roles.tfstate` |
 | S3 | `product-s3/envs/s3.tfstate` |
 | ECR | `ecr/envs/ecr.tfstate` |
-| Networking | `cloudnetworking/<prod\|stage\|qa\|dev>/networking.tfstate` |
-| EKS | `EKS/<Prod\|Stage\|QA\|Dev>/eks.tfstate` |
+| Networking | `networking/env/<prod\|stage\|qa\|dev>/networking.tfstate` |
+| EKS | `eks/env/<prod\|stage\|qa\|dev>/eks.tfstate` |
 
 The teal arrow is the only link between stacks. `EKS/<env>/main.tf` **reads** the outputs of `Networking/<env>`:
 
@@ -332,7 +332,7 @@ data "terraform_remote_state" "networking" {
   backend = "s3"
   config = {
     bucket = var.networking_state_bucket
-    key    = var.networking_state_key      # e.g. cloudnetworking/prod/networking.tfstate
+    key    = var.networking_state_key      # e.g. networking/env/prod/networking.tfstate
     region = var.region
   }
 }
@@ -452,7 +452,7 @@ Every fix has a comment next to the code. Search the repository for `CHECKOV FIX
 | Environment stacks are `<stack>/<env>/` | `EKS/Prod`, `Networking/Stage` | Each environment has its own folder and state |
 | Values come from `terraform.tfvars` | `node_color`, `vpc_setup` | Root variables have **no defaults**: configuration is explicit and reviewable |
 | Module variables carry the standard defaults | `node_max_size = 10` | A root only passes what is different |
-| One state file per stack and environment | `EKS/Prod/eks.tfstate` | Small blast radius, separate locks |
+| One state file per stack and environment | `eks/env/prod/eks.tfstate` | Small blast radius, separate locks |
 | `backend.tf` is never edited casually | — | Changing a key orphans the existing state |
 | Every Checkov change is explained in place | `# CHECKOV FIX (...)` / `# checkov:skip=...` | The reason travels with the code |
 | The same tags everywhere | `Project`, `Stack`, `Environment`, `Name` | Cost reports and audits can group resources |
