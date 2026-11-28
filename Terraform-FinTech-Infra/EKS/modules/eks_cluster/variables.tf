@@ -91,6 +91,30 @@ variable "devops_kubernetes_groups" {
   default     = ["hassan-devops"]
 }
 
+############################ Team access ############################
+# IAM roles that may use kubectl on this cluster. Example:
+#   team_roles = {
+#     app_team = { role_arn = "arn:aws:iam::503676493911:role/AppTeam-prod-Role", access = "view" }
+#   }
+variable "team_roles" {
+  description = "IAM roles that can use kubectl, and how much they can do"
+  default     = {}
+
+  type = map(object({
+    role_arn = string # which IAM role
+    access   = string # admin, edit or view
+  }))
+
+  # Check: every role's access must be admin, edit or view
+  validation {
+    condition = alltrue([
+      for role in var.team_roles :
+      contains(["admin", "edit", "view"], role.access)
+    ])
+    error_message = "access must be admin, edit or view."
+  }
+}
+
 ############################ Node groups ############################
 variable "node_color" {
   description = "Which node groups to create: blue, green, or both"
@@ -125,7 +149,6 @@ variable "ml_data_plane_green" {
 variable "node_instance_types" {
   description = "EC2 instance types of the worker nodes"
   type        = list(string)
-  default     = ["t3.medium"]
 }
 
 variable "core_blue_node_count" {

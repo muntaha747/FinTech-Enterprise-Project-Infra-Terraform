@@ -1,12 +1,13 @@
+# main.tf: WHAT to build. Values come from terraform.tfvars (through variables.tf).
+
 module "KMS_Prod_Key" {
-    source = "../modules"
-    region = var.region
-    description = var.description
-    enable_key_rotation = var.enable_key_rotation
-    deletion_window_in_days = var.deletion_window_in_days
-    environment = var.environment
-    key_name = var.key_name
-    multi_region = var.multi_region
-    tags = var.tags
-    
+  source = "../modules"
+
+  description             = var.description
+  environment             = var.environment
+  key_name                = var.key_name
+  enable_key_rotation     = var.enable_key_rotation
+  deletion_window_in_days = var.deletion_window_in_days
+  multi_region            = var.multi_region
+  tags                    = var.tags
 }

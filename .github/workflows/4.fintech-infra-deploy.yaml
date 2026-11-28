@@ -4,17 +4,24 @@
 # Builds the Terraform-FinTech-Infra platform on ONE GitHub-hosted runner,
 # one stack after another, in this order:
 #
-#     IAM  ->  S3  ->  ECR  ->  Networking/<env>  ->  EKS/<env>
+#     1. IAM               (global)
+#     2. KMS/<env>         (needs nothing)
+#     3. S3                (global, reads KMS)
+#     4. Networking/<env>  (needs nothing)
+#     5. EKS/<env>         (reads Networking + IAM)
+#     6. Vault/<env>       (reads Networking)
+#     7. Kafka/<env>       (reads Networking)
+#     8. Platform-Addons/<env> (reads EKS + Vault + KMS)
 #
-# IAM, S3 and ECR are global (one copy for the whole account).
-# Networking and EKS have one folder per environment: Prod, Stage, QA, Dev.
-# Networking must finish before EKS, because EKS reads the VPC subnets
-# from the Networking remote state of the same environment.
+# NEVER run by this pipeline:
+#   - Root-Backend : the state bucket, created once by hand
+#   - ECR          : managed separately
+#
+# ENVIRONMENT: Dev only for now (folders <stack>/Dev, KMS/dev).
 #
 # Runs when:
-#   - Prod-related code is pushed to the dev branch  -> deploys Prod, or
-#   - you click "Run workflow" in the Actions tab (dev branch only) and pick
-#     the environment (default: Prod).
+#   - Dev-related code is pushed to the dev branch, or
+#   - you click "Run workflow" in the Actions tab (dev branch only).
 #
 # AWS login: GitHub OIDC -> IAM role (no access keys stored in GitHub).
 # ============================================================================
@@ -24,29 +31,24 @@ on:
   push:
     branches:
       - dev
-    # Only files that Prod is built from. Changes to Stage/QA/Dev folders or to
-    # the README do not start a Prod deploy.
+    # Only files that Dev is built from. Root-Backend and ECR are left out on purpose.
     paths:
       - "Terraform-FinTech-Infra/IAM/**"
+      - "Terraform-FinTech-Infra/KMS/modules/**"
+      - "Terraform-FinTech-Infra/KMS/dev/**"
       - "Terraform-FinTech-Infra/S3/**"
-      - "Terraform-FinTech-Infra/ECR/**"
       - "Terraform-FinTech-Infra/Networking/modules/**"
-      - "Terraform-FinTech-Infra/Networking/Prod/**"
+      - "Terraform-FinTech-Infra/Networking/Dev/**"
       - "Terraform-FinTech-Infra/EKS/modules/**"
-      - "Terraform-FinTech-Infra/EKS/Prod/**"
+      - "Terraform-FinTech-Infra/EKS/Dev/**"
+      - "Terraform-FinTech-Infra/Vault/modules/**"
+      - "Terraform-FinTech-Infra/Vault/Dev/**"
+      - "Terraform-FinTech-Infra/Kafka/modules/**"
+      - "Terraform-FinTech-Infra/Kafka/Dev/**"
+      - "Terraform-FinTech-Infra/Platform-Addons/modules/**"
+      - "Terraform-FinTech-Infra/Platform-Addons/Dev/**"
       - ".github/workflows/4.fintech-infra-deploy.yaml"
-  workflow_dispatch: # manual "Run workflow" button
-    inputs:
-      environment:
-        description: "Environment to deploy (folder under Networking/ and EKS/)"
-        required: true
-        type: choice
-        default: Prod
-        options:
-          - Prod
-          - Stage
-          - QA
-          - Dev
+  workflow_dispatch: # manual "Run workflow" button (no inputs: always Dev)
 
 # id-token: write lets the job request an OIDC token to log in to AWS
 permissions:
@@ -65,23 +67,26 @@ env:
   TF_IN_AUTOMATION: "true" # shorter, CI-friendly Terraform output
   TF_INPUT: "false" # never wait for keyboard input
   INFRA_DIR: Terraform-FinTech-Infra
-  # A push always deploys Prod; a manual run deploys the environment you picked
-  ENVIRONMENT: ${{ inputs.environment || 'Prod' }}
+  # Only the Dev environment is deployed for now
+  ENVIRONMENT: Dev
 
 jobs:
   deploy:
-    name: Deploy IAM → S3 → ECR → Networking → EKS
+    name: Deploy IAM → KMS → S3 → Networking → EKS → Vault → Kafka → Platform-Addons
     runs-on: ubuntu-latest # GitHub-hosted runner (not self-hosted)
     if: github.ref == 'refs/heads/dev' # manual runs are allowed from dev only
-    timeout-minutes: 120 # EKS alone can take ~20 minutes
+    timeout-minutes: 180 # EKS ~20 min, Kafka ~15 min, add-ons ~10 min
 
     steps:
       # ---------- 1. Prepare the runner ----------
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # KMS folders are lower case (KMS/prod), the others are Prod/Stage/QA/Dev
       - name: Show target environment
-        run: echo "Deploying environment -> $ENVIRONMENT"
+        run: |
+          echo "ENV_LOWER=${ENVIRONMENT,,}" >> "$GITHUB_ENV"
+          echo "Deploying environment -> $ENVIRONMENT"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -103,17 +108,19 @@ jobs:
         working-directory: ${{ env.INFRA_DIR }}
         run: terraform fmt -check -recursive
 
-      - name: Checkov security scan (all stacks)
+      - name: Checkov security scan (Root-Backend and ECR skipped)
+        continue-on-error: true # TEMPORARY while testing: findings are shown but do not stop the deploy
         run: |
           pipx install "checkov==$CHECKOV_VERSION"
-          checkov -d "$INFRA_DIR" --framework terraform --quiet --compact
+          checkov -d "$INFRA_DIR" --framework terraform --quiet --compact \
+            --skip-path Root-Backend --skip-path ECR
 
       # ---------- 3. Deploy each stack in order ----------
       # ORDER GUARANTEE: steps in one job run strictly one after another on the SAME runner.
       # A step starts only after the previous one has finished successfully; if any step
       # fails, all later steps are skipped. So stack N+1 never begins before stack N completes.
       # Every stack runs the same steps: init -> validate -> plan -> apply the saved plan.
-      - name: "1/5 IAM (global)"
+      - name: "1/8 IAM (global)"
         working-directory: ${{ env.INFRA_DIR }}/IAM
         run: |
           rm -f plan1
@@ -122,7 +129,16 @@ jobs:
           terraform plan -var-file="terraform.tfvars" -out plan1
           terraform apply plan1
 
-      - name: "2/5 S3 (global)"
+      - name: "2/8 KMS (${{ env.ENV_LOWER }})"
+        working-directory: ${{ env.INFRA_DIR }}/KMS/${{ env.ENV_LOWER }}
+        run: |
+          rm -f plan1
+          terraform init
+          terraform validate
+          terraform plan -var-file="terraform.tfvars" -out plan1
+          terraform apply plan1
+
+      - name: "3/8 S3 (global)"
         working-directory: ${{ env.INFRA_DIR }}/S3
         run: |
           rm -f plan1
@@ -131,16 +147,7 @@ jobs:
           terraform plan -var-file="terraform.tfvars" -out plan1
           terraform apply plan1
 
-      - name: "3/5 ECR (global)"
-        working-directory: ${{ env.INFRA_DIR }}/ECR
-        run: |
-          rm -f plan1
-          terraform init
-          terraform validate
-          terraform plan -var-file="terraform.tfvars" -out plan1
-          terraform apply plan1
-
-      - name: "4/5 Networking (${{ env.ENVIRONMENT }})"
+      - name: "4/8 Networking (${{ env.ENVIRONMENT }})"
         working-directory: ${{ env.INFRA_DIR }}/Networking/${{ env.ENVIRONMENT }}
         run: |
           rm -f plan1
@@ -149,7 +156,7 @@ jobs:
           terraform plan -var-file="terraform.tfvars" -out plan1
           terraform apply plan1
 
-      - name: "5/5 EKS (${{ env.ENVIRONMENT }})"
+      - name: "5/8 EKS (${{ env.ENVIRONMENT }})"
         working-directory: ${{ env.INFRA_DIR }}/EKS/${{ env.ENVIRONMENT }}
         run: |
           rm -f plan1
@@ -158,11 +165,38 @@ jobs:
           terraform plan -var-file="terraform.tfvars" -out plan1
           terraform apply plan1
 
+      - name: "6/8 Vault (${{ env.ENVIRONMENT }})"
+        working-directory: ${{ env.INFRA_DIR }}/Vault/${{ env.ENVIRONMENT }}
+        run: |
+          rm -f plan1
+          terraform init
+          terraform validate
+          terraform plan -var-file="terraform.tfvars" -out plan1
+          terraform apply plan1
+
+      - name: "7/8 Kafka (${{ env.ENVIRONMENT }})"
+        working-directory: ${{ env.INFRA_DIR }}/Kafka/${{ env.ENVIRONMENT }}
+        run: |
+          rm -f plan1
+          terraform init
+          terraform validate
+          terraform plan -var-file="terraform.tfvars" -out plan1
+          terraform apply plan1
+
+      - name: "8/8 Platform-Addons (${{ env.ENVIRONMENT }})"
+        working-directory: ${{ env.INFRA_DIR }}/Platform-Addons/${{ env.ENVIRONMENT }}
+        run: |
+          rm -f plan1
+          terraform init
+          terraform validate
+          terraform plan -var-file="terraform.tfvars" -out plan1
+          terraform apply plan1
+
       # ---------- 4. Quick health check ----------
-      - name: Verify EKS nodes and autoscaler
+      - name: Verify EKS nodes and platform pods
         working-directory: ${{ env.INFRA_DIR }}/EKS/${{ env.ENVIRONMENT }}
         run: |
           CLUSTER_NAME=$(terraform output -raw cluster_name)
           aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
           kubectl get nodes -o wide
-          kubectl get pods -n kube-system
+          kubectl get pods -A

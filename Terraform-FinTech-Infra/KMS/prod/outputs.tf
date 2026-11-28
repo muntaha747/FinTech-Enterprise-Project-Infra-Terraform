@@ -1,3 +1,5 @@
+# outputs.tf: values printed after apply, and read by other stacks.
+
 output "key_arn" {
   description = "ARN of the KMS key (RDS, S3, Secrets Manager, EBS use this)"
   value       = module.KMS_Prod_Key.key_arn

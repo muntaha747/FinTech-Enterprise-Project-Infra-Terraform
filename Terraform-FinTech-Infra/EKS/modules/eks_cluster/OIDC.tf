@@ -18,6 +18,5 @@ resource "aws_iam_openid_connect_provider" "eks_oidc" {
   url             = aws_eks_cluster.eks_control_plane.identity[0].oidc[0].issuer
   client_id_list  = var.oidc_client_id_list
   thumbprint_list = [data.tls_certificate.eks_oidc.certificates[0].sha1_fingerprint]
-
-  tags = merge(local.common_tags, { Name = "${var.cluster_name}-OIDC" })
+  tags            = merge(local.common_tags, { Name = "${var.cluster_name}-OIDC" })
 }

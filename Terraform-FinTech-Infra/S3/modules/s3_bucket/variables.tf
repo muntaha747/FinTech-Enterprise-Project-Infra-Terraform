@@ -28,7 +28,7 @@ variable "tags" {
 
 ########## Versioning ##########
 variable "versioning_status" {
-  description = "Bucket versioning: Enabled or Suspended"
+  description = "Bucket versioning: Enabled, Suspended or Disabled (only for new buckets)"
   type        = string
   default     = "Enabled"
 }
@@ -38,6 +38,12 @@ variable "sse_algorithm" {
   description = "Default bucket encryption: aws:kms (KMS key) or AES256 (basic S3 key)"
   type        = string
   default     = "aws:kms"
+}
+
+variable "kms_key_arn" {
+  description = "Customer managed KMS key that encrypts the buckets (null = AWS managed aws/s3 key)"
+  type        = string
+  default     = null
 }
 
 ########## Lifecycle rule ##########

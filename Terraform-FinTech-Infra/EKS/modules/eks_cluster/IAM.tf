@@ -89,7 +89,6 @@ resource "aws_iam_role" "hassan_iam_role" {
 
 # Lets the user assume the role (and nothing else)
 resource "aws_iam_user_policy" "iam_user_and_role_attachment" {
-  # checkov:skip=CKV_AWS_40: The user's only permission is to assume one role; a group for a single user would add resources without adding safety
   name = "${var.devops_user_name}-assume-role"
   user = aws_iam_user.hassan.name
 

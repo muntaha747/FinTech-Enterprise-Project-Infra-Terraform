@@ -18,8 +18,8 @@ module "fintech_vpcs" {
 
   vpc_name            = each.key
   vpc_cidr_block      = each.value.cidr
-  public_subnet       = each.value.public_subnet
-  private_subnet      = each.value.private_subnet
+  public_subnets      = each.value.public_subnets
+  private_subnets     = each.value.private_subnets
   enable_nat_gateway  = each.value.enable_nat_gateway
   interface_endpoints = each.value.interface_endpoints
   public_ingress      = each.value.public_ingress
@@ -27,9 +27,8 @@ module "fintech_vpcs" {
   private_ingress     = each.value.private_ingress
   private_egress      = each.value.private_egress
 
-  availability_zones = var.availability_zones
-  environment        = var.environment
-  organization       = var.organization
-  tgw_id             = module.tgw.tgw_id
-  tags               = local.common_tags
+  environment  = var.environment
+  organization = var.organization
+  tgw_id       = module.tgw.tgw_id
+  tags         = local.common_tags
 }

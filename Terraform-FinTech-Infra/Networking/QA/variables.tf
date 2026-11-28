@@ -25,24 +25,19 @@ variable "organization" {
   type        = string
 }
 
-variable "availability_zones" {
-  description = "Availability zones to spread the subnets across"
-  type        = list(string)
-}
-
 variable "tgw_name" {
   description = "Name of the Transit Gateway"
   type        = string
 }
 
 # One entry per VPC: the key is the VPC name, the value is its settings.
-# Security group rules are maps: rule name => settings.
+# Security group rules are maps: rule name => settings. Leave a rule set out = no rules.
 variable "vpc_setup" {
   description = "Settings for every VPC to create (VPC name => settings)"
   type = map(object({
     cidr                = string
-    public_subnet       = list(string)
-    private_subnet      = list(string)
+    public_subnets      = optional(map(string), {}) # CIDR = AZ
+    private_subnets     = map(string)               # CIDR = AZ
     enable_nat_gateway  = bool
     interface_endpoints = list(string)
 
@@ -60,18 +55,18 @@ variable "vpc_setup" {
       cidr_blocks = list(string)
     })), {})
 
-    private_ingress = map(object({
+    private_ingress = optional(map(object({
       from_port   = number
       to_port     = number
       protocol    = string
       cidr_blocks = list(string)
-    }))
+    })), {})
 
-    private_egress = map(object({
+    private_egress = optional(map(object({
       from_port   = number
       to_port     = number
       protocol    = string
       cidr_blocks = list(string)
-    }))
+    })), {})
   }))
 }

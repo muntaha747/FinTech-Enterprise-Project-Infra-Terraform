@@ -1,5 +1,5 @@
-# variables.tf: every value main.tf uses. Defaults are the standard settings;
-# the root module only passes a value when it wants something different.
+# variables.tf: inputs of the IAM roles module.
+# Values with a default are the standard settings; the root only passes what is different.
 
 ########## Who and where ##########
 variable "account_id" {

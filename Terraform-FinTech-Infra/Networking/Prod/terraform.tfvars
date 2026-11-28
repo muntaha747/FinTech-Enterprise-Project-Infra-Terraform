@@ -2,21 +2,29 @@
 # CIDR plan for Prod: Edge 10.10.0.0/16 | App 10.20.0.0/16 | Database 10.30.0.0/16 | Ops 10.40.0.0/16
 # (every environment uses its own ranges, so no two VPCs in the account overlap)
 
-region             = "us-east-1"
-project_name       = "FinTech-Enterprise-Project"
-stack_name         = "cloud-networking"
-environment        = "Prod"
-organization       = "FinTech"
-availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
-tgw_name           = "FinTech-TGW"
+region       = "us-east-1"
+project_name = "FinTech-Enterprise-Project"
+stack_name   = "cloud-networking"
+environment  = "Prod"
+organization = "FinTech"
+tgw_name     = "FinTech-TGW"
 
+# Subnets are written as CIDR = AZ.
 vpc_setup = {
 
   #################### EDGE: internet-facing entry tier ####################
   "FinTech-Edge" = {
-    cidr                = "10.10.0.0/16"
-    public_subnet       = ["10.10.1.0/24", "10.10.2.0/24", "10.10.3.0/24"]
-    private_subnet      = ["10.10.11.0/24", "10.10.12.0/24", "10.10.13.0/24"]
+    cidr = "10.10.0.0/16"
+    public_subnets = {
+      "10.10.1.0/24" = "us-east-1a"
+      "10.10.2.0/24" = "us-east-1b"
+      "10.10.3.0/24" = "us-east-1c"
+    }
+    private_subnets = {
+      "10.10.11.0/24" = "us-east-1a"
+      "10.10.12.0/24" = "us-east-1b"
+      "10.10.13.0/24" = "us-east-1c"
+    }
     enable_nat_gateway  = false
     interface_endpoints = []
 
@@ -36,12 +44,20 @@ vpc_setup = {
 
   #################### APP: EKS workloads ####################
   "FinTech-App" = {
-    cidr          = "10.20.0.0/16"
-    public_subnet = ["10.20.1.0/24", "10.20.2.0/24", "10.20.3.0/24"]
-    private_subnet = [
-      "10.20.11.0/24", "10.20.12.0/24", "10.20.13.0/24",
-      "10.20.21.0/24", "10.20.22.0/24", "10.20.23.0/24",
-    ]
+    cidr = "10.20.0.0/16"
+    public_subnets = {
+      "10.20.1.0/24" = "us-east-1a"
+      "10.20.2.0/24" = "us-east-1b"
+      "10.20.3.0/24" = "us-east-1c"
+    }
+    private_subnets = {
+      "10.20.11.0/24" = "us-east-1a"
+      "10.20.12.0/24" = "us-east-1b"
+      "10.20.13.0/24" = "us-east-1c"
+      "10.20.21.0/24" = "us-east-1a"
+      "10.20.22.0/24" = "us-east-1b"
+      "10.20.23.0/24" = "us-east-1c"
+    }
     enable_nat_gateway  = true
     interface_endpoints = ["ecr.api", "ecr.dkr", "secretsmanager", "kms"]
 
@@ -64,12 +80,16 @@ vpc_setup = {
 
   #################### DATABASE: data tier, no internet path at all ####################
   "FinTech-Database" = {
-    cidr          = "10.30.0.0/16"
-    public_subnet = []
-    private_subnet = [
-      "10.30.11.0/24", "10.30.12.0/24", "10.30.13.0/24",
-      "10.30.21.0/24", "10.30.22.0/24", "10.30.23.0/24",
-    ]
+    cidr           = "10.30.0.0/16"
+    public_subnets = {}
+    private_subnets = {
+      "10.30.11.0/24" = "us-east-1a"
+      "10.30.12.0/24" = "us-east-1b"
+      "10.30.13.0/24" = "us-east-1c"
+      "10.30.21.0/24" = "us-east-1a"
+      "10.30.22.0/24" = "us-east-1b"
+      "10.30.23.0/24" = "us-east-1c"
+    }
     enable_nat_gateway  = false
     interface_endpoints = ["kms"]
 
@@ -85,9 +105,17 @@ vpc_setup = {
 
   #################### OPS: monitoring, GitOps and Vault ####################
   "FinTech-Ops" = {
-    cidr                = "10.40.0.0/16"
-    public_subnet       = ["10.40.1.0/24", "10.40.2.0/24", "10.40.3.0/24"]
-    private_subnet      = ["10.40.11.0/24", "10.40.12.0/24", "10.40.13.0/24"]
+    cidr = "10.40.0.0/16"
+    public_subnets = {
+      "10.40.1.0/24" = "us-east-1a"
+      "10.40.2.0/24" = "us-east-1b"
+      "10.40.3.0/24" = "us-east-1c"
+    }
+    private_subnets = {
+      "10.40.11.0/24" = "us-east-1a"
+      "10.40.12.0/24" = "us-east-1b"
+      "10.40.13.0/24" = "us-east-1c"
+    }
     enable_nat_gateway  = true
     interface_endpoints = []
 

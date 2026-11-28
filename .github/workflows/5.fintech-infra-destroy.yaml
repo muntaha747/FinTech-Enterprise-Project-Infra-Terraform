@@ -4,21 +4,34 @@
 # Tears down the Terraform-FinTech-Infra platform on ONE GitHub-hosted runner,
 # in the REVERSE of the deploy order:
 #
-#     EKS/<env>  ->  Networking/<env>  ->  ECR  ->  S3  ->  IAM
+#     1. Platform-Addons/<env>  (Helm charts inside EKS)
+#     2. Kafka/<env>
+#     3. Vault/<env>
+#     4. EKS/<env>
+#     5. Networking/<env>       (VPCs can go once nothing is inside them)
+#     6. S3                     (global)
+#     7. KMS/<env>
+#     8. IAM                    (global)
 #
-# EKS goes first because its cluster and nodes live inside the Networking
-# subnets; a VPC cannot be deleted while nodes are still attached to it.
+# NEVER run by this pipeline:
+#   - Root-Backend : the state bucket stays, so the next deploy can use it
+#   - ECR          : managed separately, images are kept
 #
 # Runs ONLY by hand: GitHub -> Actions -> "5. FinTech Infra - Destroy"
-# -> Run workflow (branch: dev) -> pick the environment -> type  destroy  -> Run.
+# -> Run workflow (branch: dev) -> pick the environment (default: Dev)
+# -> type  destroy  -> Run.
+#
+# Vault and Platform-Addons only have Dev and Prod folders. For QA and Stage
+# those two steps are skipped automatically.
 #
 # Notes:
-#   - ECR, S3 and IAM are GLOBAL (shared by every environment). Untick
-#     "destroy_global_stacks" when another environment is still running.
-#   - The state bucket (fintech-project-statefile-bucket) is NOT destroyed;
-#     the emptied state files stay there for the next deploy.
-#   - S3 buckets and ECR repositories must be EMPTY, otherwise AWS refuses
-#     to delete them (force_destroy / force_delete are off on purpose).
+#   - Each stack has its own tick box. S3 and IAM are GLOBAL (shared by every
+#     environment): untick them when another environment is still running.
+#   - S3 buckets must be EMPTY, otherwise AWS refuses to delete them
+#     (force_destroy is off on purpose).
+#   - Before running: delete Kubernetes LoadBalancer Services and PVCs you
+#     created by hand. Terraform does not know about them, and their ELBs /
+#     EBS volumes would block the VPC delete and keep costing money.
 # ============================================================================
 name: "5. FinTech Infra - Destroy"
 
@@ -26,18 +39,48 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: "Environment to destroy (folder under Networking/ and EKS/)"
+        description: "Environment to destroy"
         required: true
         type: choice
-        default: Prod
+        default: Dev
         options:
-          - Prod
-          - Stage
-          - QA
           - Dev
-      destroy_global_stacks:
-        description: "Also destroy the shared stacks (ECR, S3, IAM). Untick if another environment is still running."
-        required: true
+          - QA
+          - Stage
+          - Prod
+      # One tick box per stack (GitHub drop-downs allow only one choice).
+      # Untick a stack to keep it. Keep the order in mind: a stack can only go
+      # when the stacks ABOVE it are gone (e.g. Networking needs EKS gone first).
+      platform_addons:
+        description: "1. Destroy Platform-Addons"
+        type: boolean
+        default: true
+      kafka:
+        description: "2. Destroy Kafka"
+        type: boolean
+        default: true
+      vault:
+        description: "3. Destroy Vault"
+        type: boolean
+        default: true
+      eks:
+        description: "4. Destroy EKS"
+        type: boolean
+        default: true
+      networking:
+        description: "5. Destroy Networking"
+        type: boolean
+        default: true
+      s3:
+        description: "6. Destroy S3 (global, shared by every environment)"
+        type: boolean
+        default: true
+      kms:
+        description: "7. Destroy KMS"
+        type: boolean
+        default: true
+      iam:
+        description: "8. Destroy IAM (global, shared by every environment)"
         type: boolean
         default: true
       confirm:
@@ -60,23 +103,28 @@ env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   INFRA_DIR: Terraform-FinTech-Infra
+  # The environment picked in the drop-down (Dev, QA, Stage or Prod)
   ENVIRONMENT: ${{ inputs.environment }}
 
 jobs:
   destroy:
-    name: Destroy EKS → Networking → ECR → S3 → IAM
+    name: Destroy Platform-Addons → Kafka → Vault → EKS → Networking → S3 → KMS → IAM
     runs-on: ubuntu-latest
     # Safety: only from dev, and only when the word "destroy" was typed
     if: github.ref == 'refs/heads/dev' && inputs.confirm == 'destroy'
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
       # ---------- 1. Prepare the runner ----------
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # KMS folders are lower case (KMS/prod), the others are Prod/Stage/QA/Dev
       - name: Show target environment
-        run: echo "Destroying environment -> $ENVIRONMENT (global stacks too -> ${{ inputs.destroy_global_stacks }})"
+        run: |
+          echo "ENV_LOWER=${ENVIRONMENT,,}" >> "$GITHUB_ENV"
+          echo "Destroying environment -> $ENVIRONMENT"
+          echo "Stacks ticked: platform_addons=${{ inputs.platform_addons }} kafka=${{ inputs.kafka }} vault=${{ inputs.vault }} eks=${{ inputs.eks }} networking=${{ inputs.networking }} s3=${{ inputs.s3 }} kms=${{ inputs.kms }} iam=${{ inputs.iam }}"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -98,48 +146,164 @@ jobs:
       # A step starts only after the previous one has finished successfully; if any step
       # fails, all later steps are skipped. So stack N+1 never begins before stack N completes.
       # Every stack: init -> plan the destroy (shown in the log) -> apply that plan.
-      - name: "1/5 EKS (${{ env.ENVIRONMENT }})"
+
+      # Skipped when this environment has no Platform-Addons folder (QA, Stage)
+      - name: "1/8 Platform-Addons (${{ env.ENVIRONMENT }})"
+        if: inputs.platform_addons && hashFiles(format('{0}/Platform-Addons/{1}/main.tf', env.INFRA_DIR, env.ENVIRONMENT)) != ''
+        working-directory: ${{ env.INFRA_DIR }}/Platform-Addons/${{ env.ENVIRONMENT }}
+        run: |
+          terraform init
+          # Skip this stack if its state has no real resources (never deployed, already
+          # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
+          # Without this check, a missing stack makes the plan fail and every later
+          # step is skipped, leaving costly stacks like Networking running.
+          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
+          if [ -z "$RESOURCES" ]; then
+            echo "Nothing to destroy in this stack, skipping"
+            exit 0
+          fi
+          terraform plan -destroy -var-file="terraform.tfvars" -out destroyplan
+          terraform apply destroyplan
+
+      - name: "2/8 Kafka (${{ env.ENVIRONMENT }})"
+        if: inputs.kafka
+        working-directory: ${{ env.INFRA_DIR }}/Kafka/${{ env.ENVIRONMENT }}
+        run: |
+          terraform init
+          # Skip this stack if its state has no real resources (never deployed, already
+          # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
+          # Without this check, a missing stack makes the plan fail and every later
+          # step is skipped, leaving costly stacks like Networking running.
+          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
+          if [ -z "$RESOURCES" ]; then
+            echo "Nothing to destroy in this stack, skipping"
+            exit 0
+          fi
+          terraform plan -destroy -var-file="terraform.tfvars" -out destroyplan
+          terraform apply destroyplan
+
+      # Skipped when this environment has no Vault folder (QA, Stage)
+      - name: "3/8 Vault (${{ env.ENVIRONMENT }})"
+        if: inputs.vault && hashFiles(format('{0}/Vault/{1}/main.tf', env.INFRA_DIR, env.ENVIRONMENT)) != ''
+        working-directory: ${{ env.INFRA_DIR }}/Vault/${{ env.ENVIRONMENT }}
+        run: |
+          terraform init
+          # Skip this stack if its state has no real resources (never deployed, already
+          # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
+          # Without this check, a missing stack makes the plan fail and every later
+          # step is skipped, leaving costly stacks like Networking running.
+          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
+          if [ -z "$RESOURCES" ]; then
+            echo "Nothing to destroy in this stack, skipping"
+            exit 0
+          fi
+          terraform plan -destroy -var-file="terraform.tfvars" -out destroyplan
+          terraform apply destroyplan
+
+      - name: "4/8 EKS (${{ env.ENVIRONMENT }})"
+        if: inputs.eks
         working-directory: ${{ env.INFRA_DIR }}/EKS/${{ env.ENVIRONMENT }}
         run: |
           terraform init
+          # Skip this stack if its state has no real resources (never deployed, already
+          # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
+          # Without this check, a missing stack makes the plan fail and every later
+          # step is skipped, leaving costly stacks like Networking running.
+          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
+          if [ -z "$RESOURCES" ]; then
+            echo "Nothing to destroy in this stack, skipping"
+            exit 0
+          fi
           terraform plan -destroy -var-file="terraform.tfvars" -out destroyplan
           terraform apply destroyplan
 
-      - name: "2/5 Networking (${{ env.ENVIRONMENT }})"
+      - name: "5/8 Networking (${{ env.ENVIRONMENT }})"
+        if: inputs.networking
         working-directory: ${{ env.INFRA_DIR }}/Networking/${{ env.ENVIRONMENT }}
         run: |
           terraform init
+          # Skip this stack if its state has no real resources (never deployed, already
+          # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
+          # Without this check, a missing stack makes the plan fail and every later
+          # step is skipped, leaving costly stacks like Networking running.
+          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
+          if [ -z "$RESOURCES" ]; then
+            echo "Nothing to destroy in this stack, skipping"
+            exit 0
+          fi
           terraform plan -destroy -var-file="terraform.tfvars" -out destroyplan
           terraform apply destroyplan
 
-      - name: "3/5 ECR (global)"
-        if: inputs.destroy_global_stacks
-        working-directory: ${{ env.INFRA_DIR }}/ECR
-        run: |
-          terraform init
-          terraform plan -destroy -var-file="terraform.tfvars" -out destroyplan
-          terraform apply destroyplan
-
-      - name: "4/5 S3 (global)"
-        if: inputs.destroy_global_stacks
+      - name: "6/8 S3 (global)"
+        if: inputs.s3
         working-directory: ${{ env.INFRA_DIR }}/S3
         run: |
           terraform init
+          # Skip this stack if its state has no real resources (never deployed, already
+          # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
+          # Without this check, a missing stack makes the plan fail and every later
+          # step is skipped, leaving costly stacks like Networking running.
+          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
+          if [ -z "$RESOURCES" ]; then
+            echo "Nothing to destroy in this stack, skipping"
+            exit 0
+          fi
           terraform plan -destroy -var-file="terraform.tfvars" -out destroyplan
           terraform apply destroyplan
 
-      - name: "5/5 IAM (global)"
-        if: inputs.destroy_global_stacks
+      # After S3, because S3 reads the KMS key from the KMS state
+      - name: "7/8 KMS (${{ env.ENV_LOWER }})"
+        if: inputs.kms
+        working-directory: ${{ env.INFRA_DIR }}/KMS/${{ env.ENV_LOWER }}
+        run: |
+          terraform init
+          # Skip this stack if its state has no real resources (never deployed, already
+          # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
+          # Without this check, a missing stack makes the plan fail and every later
+          # step is skipped, leaving costly stacks like Networking running.
+          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
+          if [ -z "$RESOURCES" ]; then
+            echo "Nothing to destroy in this stack, skipping"
+            exit 0
+          fi
+          terraform plan -destroy -var-file="terraform.tfvars" -out destroyplan
+          terraform apply destroyplan
+
+      - name: "8/8 IAM (global)"
+        if: inputs.iam
         working-directory: ${{ env.INFRA_DIR }}/IAM
         run: |
           terraform init
+          # Skip this stack if its state has no real resources (never deployed, already
+          # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
+          # Without this check, a missing stack makes the plan fail and every later
+          # step is skipped, leaving costly stacks like Networking running.
+          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
+          if [ -z "$RESOURCES" ]; then
+            echo "Nothing to destroy in this stack, skipping"
+            exit 0
+          fi
           terraform plan -destroy -var-file="terraform.tfvars" -out destroyplan
           terraform apply destroyplan
 
       # ---------- 3. Confirm nothing costly is left ----------
+      # always(): still runs when a step above failed, so you can see what is left
       - name: Check for leftover resources
+        if: always()
         run: |
-          echo "EKS clusters:  $(aws eks list-clusters --query 'clusters' --output text)"
-          echo "NAT gateways:  $(aws ec2 describe-nat-gateways --filter Name=state,Values=available,pending --query 'NatGateways[].NatGatewayId' --output text)"
-          echo "Elastic IPs:   $(aws ec2 describe-addresses --query 'Addresses[].PublicIp' --output text)"
-          echo "Custom VPCs:   $(aws ec2 describe-vpcs --filters Name=is-default,Values=false --query 'Vpcs[].VpcId' --output text)"
+          echo "EKS clusters:    $(aws eks list-clusters --query 'clusters' --output text)"
+          echo "MSK clusters:    $(aws kafka list-clusters-v2 --query 'ClusterInfoList[].ClusterName' --output text)"
+          echo "NAT gateways:    $(aws ec2 describe-nat-gateways --filter Name=state,Values=available,pending --query 'NatGateways[].NatGatewayId' --output text)"
+          echo "Transit GWs:     $(aws ec2 describe-transit-gateways --filters Name=state,Values=available,pending --query 'TransitGateways[].TransitGatewayId' --output text)"
+          echo "Elastic IPs:     $(aws ec2 describe-addresses --query 'Addresses[].PublicIp' --output text)"
+          echo "Load balancers:  $(aws elbv2 describe-load-balancers --query 'LoadBalancers[].LoadBalancerName' --output text)"
+          echo "Unused EBS vols: $(aws ec2 describe-volumes --filters Name=status,Values=available --query 'Volumes[].VolumeId' --output text)"
+          echo "Custom VPCs:     $(aws ec2 describe-vpcs --filters Name=is-default,Values=false --query 'Vpcs[].VpcId' --output text)"

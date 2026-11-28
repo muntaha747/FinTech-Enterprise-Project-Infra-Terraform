@@ -23,8 +23,8 @@ variable "environment" {
 }
 
 ############################ Networking lookup ############################
-variable "networking_state_bucket" {
-  description = "S3 bucket that holds the Networking stack's state file"
+variable "state_bucket" {
+  description = "S3 bucket that holds the state files (Networking and IAM)"
   type        = string
 }
 
@@ -69,6 +69,27 @@ variable "devops_user_name" {
   type        = string
 }
 
+############################ Team access ############################
+variable "iam_state_key" {
+  description = "Path of the IAM stack's state file"
+  type        = string
+}
+
+variable "iam_environment" {
+  description = "This environment's name in the IAM stack (dev, qa, stage or prod)"
+  type        = string
+}
+
+variable "app_team_access" {
+  description = "kubectl access of AppTeam-<env>-Role: admin, edit or view"
+  type        = string
+}
+
+variable "cicd_access" {
+  description = "kubectl access of FinTech-CI-CD-Deployer-<env>: admin, edit or view"
+  type        = string
+}
+
 ############################ Node groups ############################
 variable "node_color" {
   description = "Which node groups to create: blue, green, or both"
@@ -93,6 +114,26 @@ variable "ml_data_plane_blue" {
 variable "ml_data_plane_green" {
   description = "Name of the Machine Learning Green node group"
   type        = string
+}
+
+variable "node_instance_types" {
+  description = "EC2 instance types of the worker nodes"
+  type        = list(string)
+}
+
+variable "core_blue_node_count" {
+  description = "Number of nodes in the Core Services Blue node group"
+  type        = number
+}
+
+variable "standby_node_count" {
+  description = "Number of nodes in Core Green, ML Blue and ML Green (0 = none)"
+  type        = number
+}
+
+variable "node_max_size" {
+  description = "Maximum nodes per node group (Cluster Autoscaler upper limit)"
+  type        = number
 }
 
 ############################ Cluster Autoscaler ############################

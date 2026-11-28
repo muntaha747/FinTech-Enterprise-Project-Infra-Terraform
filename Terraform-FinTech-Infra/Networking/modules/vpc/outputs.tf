@@ -12,12 +12,12 @@ output "vpc_cidr_block" {
 ################################## Subnets ##################################
 output "public_subnet_ids" {
   description = "IDs of the public subnets"
-  value       = aws_subnet.public_subnet[*].id
+  value       = values(aws_subnet.public_subnet)[*].id
 }
 
 output "private_subnet_ids" {
   description = "IDs of the private subnets"
-  value       = aws_subnet.private_subnet[*].id
+  value       = values(aws_subnet.private_subnet)[*].id
 }
 
 ################################## Gateways ##################################
@@ -50,12 +50,12 @@ output "private_route_table_id" {
 ################################## Security Groups ##################################
 output "public_security_group_id" {
   description = "ID of the public subnet security group (null if no public subnets)"
-  value       = try(aws_security_group.public_subnet_sg["public"].id, null)
+  value       = try(aws_security_group.public_subnet_sg[0].id, null)
 }
 
 output "private_security_group_id" {
   description = "ID of the private subnet security group (null if no private subnets)"
-  value       = try(aws_security_group.private_subnet_sg["private"].id, null)
+  value       = try(aws_security_group.private_subnet_sg[0].id, null)
 }
 
 output "endpoint_security_group_id" {

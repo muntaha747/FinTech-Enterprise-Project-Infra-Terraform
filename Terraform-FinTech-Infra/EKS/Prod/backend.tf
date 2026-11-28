@@ -1,7 +1,7 @@
 # backend.tf: where the state file is stored
 terraform {
   backend "s3" {
-    bucket       = "fintech-project-statefile-bucket"
+    bucket       = "fintech-remote-backed-statefiles"
     key          = "eks/env/prod/eks.tfstate"
     region       = "us-east-1"
     encrypt      = true

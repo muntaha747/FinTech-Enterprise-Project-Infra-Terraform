@@ -5,8 +5,19 @@
 data "terraform_remote_state" "networking" {
   backend = "s3"
   config = {
-    bucket = var.networking_state_bucket
+    bucket = var.state_bucket
     key    = var.networking_state_key
+    region = var.region
+  }
+}
+
+# Reads the IAM stack's outputs: the platform admin, app team and CI/CD roles.
+# IAM must be applied before EKS.
+data "terraform_remote_state" "iam" {
+  backend = "s3"
+  config = {
+    bucket = var.state_bucket
+    key    = var.iam_state_key
     region = var.region
   }
 }
@@ -15,6 +26,7 @@ data "terraform_remote_state" "networking" {
 module "eks_cluster" {
   source = "../modules/eks_cluster"
 
+  # General
   region      = var.region
   environment = var.environment
   tags        = local.common_tags
@@ -29,12 +41,19 @@ module "eks_cluster" {
   cluster_admin_arns        = var.cluster_admin_arns
   devops_user_name          = var.devops_user_name
 
+  # Team access (roles from the IAM stack)
+  team_roles = local.team_roles
+
   # Node groups
-  node_color          = var.node_color
-  data_plane_blue     = var.data_plane_blue
-  data_plane_green    = var.data_plane_green
-  ml_data_plane_blue  = var.ml_data_plane_blue
-  ml_data_plane_green = var.ml_data_plane_green
+  node_color           = var.node_color
+  data_plane_blue      = var.data_plane_blue
+  data_plane_green     = var.data_plane_green
+  ml_data_plane_blue   = var.ml_data_plane_blue
+  ml_data_plane_green  = var.ml_data_plane_green
+  node_instance_types  = var.node_instance_types
+  core_blue_node_count = var.core_blue_node_count
+  standby_node_count   = var.standby_node_count
+  node_max_size        = var.node_max_size
 
   # Cluster Autoscaler
   cluster_autoscaler_chart_version = var.cluster_autoscaler_chart_version

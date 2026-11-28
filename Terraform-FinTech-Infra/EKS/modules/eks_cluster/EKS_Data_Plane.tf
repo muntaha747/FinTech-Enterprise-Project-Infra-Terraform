@@ -1,17 +1,16 @@
-# EKS_Data_Plane.tf: the worker nodes. Four managed node groups:
-#   core blue / core green  -> normal application pods
-#   ml blue   / ml green    -> ML inference pods only (tainted)
+# EKS_Data_Plane.tf: the worker nodes. Four node groups:
+#   Core Blue  / Core Green -> normal application pods
+#   ML Blue    / ML Green   -> ML pods only (tainted)
 #
-# var.node_color decides which colour exists: "blue", "green" or "both".
-#   count = 1 -> the node group is created, count = 0 -> it is not.
-# Upgrade without downtime: blue -> both -> green.
+# var.node_color decides which colour is created: "blue", "green" or "both".
+#   count = 1 -> created, count = 0 -> not created
 
 locals {
   create_blue  = var.node_color == "blue" || var.node_color == "both"
   create_green = var.node_color == "green" || var.node_color == "both"
 }
 
-############################ Core services: BLUE node group ############################
+############################ Core Blue ############################
 resource "aws_eks_node_group" "core_data_plane_blue" {
   count           = local.create_blue ? 1 : 0
   cluster_name    = aws_eks_cluster.eks_control_plane.name
@@ -20,31 +19,25 @@ resource "aws_eks_node_group" "core_data_plane_blue" {
   subnet_ids      = var.private_subnet_ids
   instance_types  = var.node_instance_types
 
+  labels = { role = "core" }
+
   scaling_config {
-    desired_size = var.core_blue_node_count # starting size only; the Cluster Autoscaler changes it later
+    desired_size = var.core_blue_node_count
     min_size     = var.core_blue_node_count
     max_size     = var.node_max_size
   }
 
-  # During an update, replace at most this many nodes at a time
   update_config {
     max_unavailable = var.node_max_unavailable
   }
 
   lifecycle {
     create_before_destroy = true
-
-    # desired_size is managed by the Cluster Autoscaler at runtime (it scales between
-    # min_size and max_size). Terraform only uses desired_size when the group is first
-    # created and never resets it afterwards, so a push cannot remove busy nodes.
-    # To force more nodes, raise min_size instead.
-    ignore_changes = [scaling_config[0].desired_size]
+    ignore_changes        = [scaling_config[0].desired_size] # Cluster Autoscaler owns this
   }
 
   tags = merge(local.common_tags, { Name = var.data_plane_blue })
 
-  # The IAM permissions must exist before the nodes start and be removed only after
-  # they are gone, otherwise EKS cannot clean up the EC2 instances and network cards.
   depends_on = [
     aws_iam_role_policy_attachment.amazon_eks_worker_node_policy,
     aws_iam_role_policy_attachment.amazon_eks_cni_policy,
@@ -52,7 +45,7 @@ resource "aws_eks_node_group" "core_data_plane_blue" {
   ]
 }
 
-############################ Core services: GREEN node group ############################
+############################ Core Green ############################
 resource "aws_eks_node_group" "core_data_plane_green" {
   count           = local.create_green ? 1 : 0
   cluster_name    = aws_eks_cluster.eks_control_plane.name
@@ -61,31 +54,25 @@ resource "aws_eks_node_group" "core_data_plane_green" {
   subnet_ids      = var.private_subnet_ids
   instance_types  = var.node_instance_types
 
+  labels = { role = "core" }
+
   scaling_config {
-    desired_size = var.standby_node_count # starting size only; the Cluster Autoscaler changes it later
+    desired_size = var.standby_node_count
     min_size     = var.standby_node_count
     max_size     = var.node_max_size
   }
 
-  # During an update, replace at most this many nodes at a time
   update_config {
     max_unavailable = var.node_max_unavailable
   }
 
   lifecycle {
     create_before_destroy = true
-
-    # desired_size is managed by the Cluster Autoscaler at runtime (it scales between
-    # min_size and max_size). Terraform only uses desired_size when the group is first
-    # created and never resets it afterwards, so a push cannot remove busy nodes.
-    # To force more nodes, raise min_size instead.
-    ignore_changes = [scaling_config[0].desired_size]
+    ignore_changes        = [scaling_config[0].desired_size] # Cluster Autoscaler owns this
   }
 
   tags = merge(local.common_tags, { Name = var.data_plane_green })
 
-  # The IAM permissions must exist before the nodes start and be removed only after
-  # they are gone, otherwise EKS cannot clean up the EC2 instances and network cards.
   depends_on = [
     aws_iam_role_policy_attachment.amazon_eks_worker_node_policy,
     aws_iam_role_policy_attachment.amazon_eks_cni_policy,
@@ -93,7 +80,7 @@ resource "aws_eks_node_group" "core_data_plane_green" {
   ]
 }
 
-############################ ML services: BLUE node group ############################
+############################ ML Blue ############################
 resource "aws_eks_node_group" "ml_data_plane_blue" {
   count           = local.create_blue ? 1 : 0
   cluster_name    = aws_eks_cluster.eks_control_plane.name
@@ -102,38 +89,32 @@ resource "aws_eks_node_group" "ml_data_plane_blue" {
   subnet_ids      = var.private_subnet_ids
   instance_types  = var.node_instance_types
 
+  labels = { role = "ml" }
+
   scaling_config {
-    desired_size = var.standby_node_count # starting size only; the Cluster Autoscaler changes it later
+    desired_size = var.standby_node_count
     min_size     = var.standby_node_count
     max_size     = var.node_max_size
   }
 
-  # Taint: only pods that tolerate it (ML inference) may run on these nodes
+  # Only ML pods may run here
   taint {
     key    = var.ml_taint_key
     value  = var.ml_taint_value
     effect = "NO_SCHEDULE"
   }
 
-  # During an update, replace at most this many nodes at a time
   update_config {
     max_unavailable = var.node_max_unavailable
   }
 
   lifecycle {
     create_before_destroy = true
-
-    # desired_size is managed by the Cluster Autoscaler at runtime (it scales between
-    # min_size and max_size). Terraform only uses desired_size when the group is first
-    # created and never resets it afterwards, so a push cannot remove busy nodes.
-    # To force more nodes, raise min_size instead.
-    ignore_changes = [scaling_config[0].desired_size]
+    ignore_changes        = [scaling_config[0].desired_size] # Cluster Autoscaler owns this
   }
 
   tags = merge(local.common_tags, { Name = var.ml_data_plane_blue })
 
-  # The IAM permissions must exist before the nodes start and be removed only after
-  # they are gone, otherwise EKS cannot clean up the EC2 instances and network cards.
   depends_on = [
     aws_iam_role_policy_attachment.amazon_eks_worker_node_policy,
     aws_iam_role_policy_attachment.amazon_eks_cni_policy,
@@ -141,7 +122,7 @@ resource "aws_eks_node_group" "ml_data_plane_blue" {
   ]
 }
 
-############################ ML services: GREEN node group ############################
+############################ ML Green ############################
 resource "aws_eks_node_group" "ml_data_plane_green" {
   count           = local.create_green ? 1 : 0
   cluster_name    = aws_eks_cluster.eks_control_plane.name
@@ -150,38 +131,32 @@ resource "aws_eks_node_group" "ml_data_plane_green" {
   subnet_ids      = var.private_subnet_ids
   instance_types  = var.node_instance_types
 
+  labels = { role = "ml" }
+
   scaling_config {
-    desired_size = var.standby_node_count # starting size only; the Cluster Autoscaler changes it later
+    desired_size = var.standby_node_count
     min_size     = var.standby_node_count
     max_size     = var.node_max_size
   }
 
-  # Taint: only pods that tolerate it (ML inference) may run on these nodes
+  # Only ML pods may run here
   taint {
     key    = var.ml_taint_key
     value  = var.ml_taint_value
     effect = "NO_SCHEDULE"
   }
 
-  # During an update, replace at most this many nodes at a time
   update_config {
     max_unavailable = var.node_max_unavailable
   }
 
   lifecycle {
     create_before_destroy = true
-
-    # desired_size is managed by the Cluster Autoscaler at runtime (it scales between
-    # min_size and max_size). Terraform only uses desired_size when the group is first
-    # created and never resets it afterwards, so a push cannot remove busy nodes.
-    # To force more nodes, raise min_size instead.
-    ignore_changes = [scaling_config[0].desired_size]
+    ignore_changes        = [scaling_config[0].desired_size] # Cluster Autoscaler owns this
   }
 
   tags = merge(local.common_tags, { Name = var.ml_data_plane_green })
 
-  # The IAM permissions must exist before the nodes start and be removed only after
-  # they are gone, otherwise EKS cannot clean up the EC2 instances and network cards.
   depends_on = [
     aws_iam_role_policy_attachment.amazon_eks_worker_node_policy,
     aws_iam_role_policy_attachment.amazon_eks_cni_policy,
@@ -189,9 +164,8 @@ resource "aws_eks_node_group" "ml_data_plane_green" {
   ]
 }
 
-############################ Update local kubeconfig after cluster creation ############################
-# Runs `aws eks update-kubeconfig` on the machine that applies Terraform, so kubectl works right away.
-# Re-runs automatically if the cluster is recreated (new endpoint).
+############################ kubeconfig ############################
+# After the cluster is created, set up kubectl on this machine
 resource "terraform_data" "update_kubeconfig" {
   triggers_replace = [aws_eks_cluster.eks_control_plane.endpoint]
 

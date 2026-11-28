@@ -1,4 +1,4 @@
-# locals.tf: values WORKED OUT from the variables, so main.tf only reads locals.
+# locals.tf: values WORKED OUT from the variables.
 
 locals {
   # Tags added to every repository
@@ -6,7 +6,4 @@ locals {
     Project = var.project_name
     Stack   = var.stack_name
   }
-
-  repository_names = var.repository_names
-  image_mutability = var.image_mutability
 }

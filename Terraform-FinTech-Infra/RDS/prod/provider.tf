@@ -1,3 +1,0 @@
- provider {
-    aws = var.region
-}

@@ -18,11 +18,6 @@ variable "instance_tenancy" {
   default     = "default"
 }
 
-variable "availability_zones" {
-  description = "Availability zones to spread the subnets across"
-  type        = list(string)
-}
-
 ################################## Tags ##################################
 variable "environment" {
   description = "Environment tag value, e.g. Prod"
@@ -41,16 +36,16 @@ variable "tags" {
 }
 
 ################################## Subnets ##################################
-variable "public_subnet" {
-  description = "CIDR blocks of the public subnets (empty list = no public subnets)"
-  type        = list(string)
-  default     = []
+variable "public_subnets" {
+  description = "Public subnets: CIDR = AZ, e.g. { \"10.20.1.0/24\" = \"us-east-1a\" } (empty = none)"
+  type        = map(string)
+  default     = {}
 }
 
-variable "private_subnet" {
-  description = "CIDR blocks of the private subnets"
-  type        = list(string)
-  default     = []
+variable "private_subnets" {
+  description = "Private subnets: CIDR = AZ, e.g. { \"10.20.11.0/24\" = \"us-east-1a\" }"
+  type        = map(string)
+  default     = {}
 }
 
 ################################## Security group rules ##################################

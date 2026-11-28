@@ -1,0 +1,42 @@
+#!/bin/bash
+# Runs once on first boot: installs Vault and starts it.
+set -euo pipefail
+
+# 1. Install Vault from HashiCorp's official repo
+dnf install -y dnf-plugins-core
+dnf config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+dnf install -y vault
+
+# 2. Vault config
+PRIVATE_IP=$(TOKEN=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60") && \
+  curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4)
+
+mkdir -p /opt/vault/data
+chown -R vault:vault /opt/vault
+
+cat > /etc/vault.d/vault.hcl <<EOF
+ui           = true
+api_addr     = "http://$PRIVATE_IP:8200"
+cluster_addr = "http://$PRIVATE_IP:8201"
+
+# Data is stored on this server's disk
+storage "raft" {
+  path    = "/opt/vault/data"
+  node_id = "vault-1"
+}
+
+# TODO: turn on TLS (tls_cert_file / tls_key_file) before real secrets go in
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  tls_disable = 1
+}
+
+# Unseal automatically with KMS
+seal "awskms" {
+  region     = "${region}"
+  kms_key_id = "${kms_key_id}"
+}
+EOF
+
+# 3. Start Vault
+systemctl enable --now vault

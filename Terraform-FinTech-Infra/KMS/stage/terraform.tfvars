@@ -1,3 +1,5 @@
+# terraform.tfvars: the VALUES for this KMS stack.
+
 region                  = "us-east-1"
 environment             = "stage"
 key_name                = "data"

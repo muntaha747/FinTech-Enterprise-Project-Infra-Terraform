@@ -1,3 +1,5 @@
+# versions.tf: the Terraform and provider versions this stack needs.
+
 terraform {
   required_version = "~> 1.17"
 
