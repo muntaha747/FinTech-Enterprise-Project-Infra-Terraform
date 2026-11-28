@@ -1,5 +1,5 @@
 # ============================================================================
-# 4. FinTech Infra - DEPLOY
+# 4. FinTech Infra - DEPLOYMENT
 # ----------------------------------------------------------------------------
 # Builds the Terraform-FinTech-Infra platform on ONE GitHub-hosted runner,
 # one stack after another, in this order:
