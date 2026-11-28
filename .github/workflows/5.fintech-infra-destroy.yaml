@@ -157,7 +157,16 @@ jobs:
           # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
           # Without this check, a missing stack makes the plan fail and every later
           # step is skipped, leaving costly stacks like Networking running.
-          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          # "No state file was found" = this stack was never deployed -> skip it.
+          # Any other error (e.g. no access to the state bucket) stops the job.
+          if ! ALL=$(terraform state list 2>state_error.txt); then
+            if grep -q "No state file was found" state_error.txt; then
+              echo "No state file for this stack (never deployed), skipping"
+              exit 0
+            fi
+            cat state_error.txt
+            exit 1
+          fi
           RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
           if [ -z "$RESOURCES" ]; then
             echo "Nothing to destroy in this stack, skipping"
@@ -175,7 +184,16 @@ jobs:
           # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
           # Without this check, a missing stack makes the plan fail and every later
           # step is skipped, leaving costly stacks like Networking running.
-          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          # "No state file was found" = this stack was never deployed -> skip it.
+          # Any other error (e.g. no access to the state bucket) stops the job.
+          if ! ALL=$(terraform state list 2>state_error.txt); then
+            if grep -q "No state file was found" state_error.txt; then
+              echo "No state file for this stack (never deployed), skipping"
+              exit 0
+            fi
+            cat state_error.txt
+            exit 1
+          fi
           RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
           if [ -z "$RESOURCES" ]; then
             echo "Nothing to destroy in this stack, skipping"
@@ -194,7 +212,16 @@ jobs:
           # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
           # Without this check, a missing stack makes the plan fail and every later
           # step is skipped, leaving costly stacks like Networking running.
-          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          # "No state file was found" = this stack was never deployed -> skip it.
+          # Any other error (e.g. no access to the state bucket) stops the job.
+          if ! ALL=$(terraform state list 2>state_error.txt); then
+            if grep -q "No state file was found" state_error.txt; then
+              echo "No state file for this stack (never deployed), skipping"
+              exit 0
+            fi
+            cat state_error.txt
+            exit 1
+          fi
           RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
           if [ -z "$RESOURCES" ]; then
             echo "Nothing to destroy in this stack, skipping"
@@ -212,7 +239,16 @@ jobs:
           # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
           # Without this check, a missing stack makes the plan fail and every later
           # step is skipped, leaving costly stacks like Networking running.
-          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          # "No state file was found" = this stack was never deployed -> skip it.
+          # Any other error (e.g. no access to the state bucket) stops the job.
+          if ! ALL=$(terraform state list 2>state_error.txt); then
+            if grep -q "No state file was found" state_error.txt; then
+              echo "No state file for this stack (never deployed), skipping"
+              exit 0
+            fi
+            cat state_error.txt
+            exit 1
+          fi
           RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
           if [ -z "$RESOURCES" ]; then
             echo "Nothing to destroy in this stack, skipping"
@@ -230,7 +266,16 @@ jobs:
           # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
           # Without this check, a missing stack makes the plan fail and every later
           # step is skipped, leaving costly stacks like Networking running.
-          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          # "No state file was found" = this stack was never deployed -> skip it.
+          # Any other error (e.g. no access to the state bucket) stops the job.
+          if ! ALL=$(terraform state list 2>state_error.txt); then
+            if grep -q "No state file was found" state_error.txt; then
+              echo "No state file for this stack (never deployed), skipping"
+              exit 0
+            fi
+            cat state_error.txt
+            exit 1
+          fi
           RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
           if [ -z "$RESOURCES" ]; then
             echo "Nothing to destroy in this stack, skipping"
@@ -248,7 +293,16 @@ jobs:
           # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
           # Without this check, a missing stack makes the plan fail and every later
           # step is skipped, leaving costly stacks like Networking running.
-          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          # "No state file was found" = this stack was never deployed -> skip it.
+          # Any other error (e.g. no access to the state bucket) stops the job.
+          if ! ALL=$(terraform state list 2>state_error.txt); then
+            if grep -q "No state file was found" state_error.txt; then
+              echo "No state file for this stack (never deployed), skipping"
+              exit 0
+            fi
+            cat state_error.txt
+            exit 1
+          fi
           RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
           if [ -z "$RESOURCES" ]; then
             echo "Nothing to destroy in this stack, skipping"
@@ -267,7 +321,16 @@ jobs:
           # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
           # Without this check, a missing stack makes the plan fail and every later
           # step is skipped, leaving costly stacks like Networking running.
-          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          # "No state file was found" = this stack was never deployed -> skip it.
+          # Any other error (e.g. no access to the state bucket) stops the job.
+          if ! ALL=$(terraform state list 2>state_error.txt); then
+            if grep -q "No state file was found" state_error.txt; then
+              echo "No state file for this stack (never deployed), skipping"
+              exit 0
+            fi
+            cat state_error.txt
+            exit 1
+          fi
           RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
           if [ -z "$RESOURCES" ]; then
             echo "Nothing to destroy in this stack, skipping"
@@ -285,7 +348,16 @@ jobs:
           # destroyed, or a deploy failed before it). Data sources (data.*) are ignored.
           # Without this check, a missing stack makes the plan fail and every later
           # step is skipped, leaving costly stacks like Networking running.
-          ALL=$(terraform state list)                          # stops the job if the state can't be read
+          # "No state file was found" = this stack was never deployed -> skip it.
+          # Any other error (e.g. no access to the state bucket) stops the job.
+          if ! ALL=$(terraform state list 2>state_error.txt); then
+            if grep -q "No state file was found" state_error.txt; then
+              echo "No state file for this stack (never deployed), skipping"
+              exit 0
+            fi
+            cat state_error.txt
+            exit 1
+          fi
           RESOURCES=$(echo "$ALL" | grep -vE '(^|\.)data\.' || true)  # keep only real resources
           if [ -z "$RESOURCES" ]; then
             echo "Nothing to destroy in this stack, skipping"
